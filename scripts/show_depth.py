@@ -4,8 +4,8 @@ from robolab_turtlebot import Turtlebot
 import numpy as np
 import cv2
 
-x_range = (-0.3, 0.3)
-z_range = (0.3, 3.0)
+x_range = (-1.90, 1.90)
+z_range = (0.0, 3.0)
 WINDOW = 'obstacles'
 
 
