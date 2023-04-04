@@ -102,30 +102,12 @@ class TurtlebotICP:
             cov += weight * q_point.dot(p_point.T)
         return cov, exclude_indices
     
-    def filter_data(self,data):
-        dbscan = DBSCAN(eps = 0.85).fit(data.T)
-        lbl = self.most_common_label(dbscan)
-        
-        print(data.T[np.where(dbscan.labels_ != lbl)].T)
-        return data.T[np.where(dbscan.labels_ == lbl)].T
-    
-    def most_common_label(self,dbscan):
-        cnt = collections.Counter(dbscan.labels_)
-        lst = list(cnt.items())
-        lst = sorted(lst, key = lambda x: x[1], reverse = True)
-        
-        print(f"Filtered {len(dbscan.labels_) - lst[0][1]} points")
-        return lst[0][0]
-
     def optimize(self,data):
         MIN_ANGLE = 0
         MAX_ANGLE = 121
         ANGLE_STEP = 60
         optimum = None
         
-        # Filter data
-        data = self.filter_data(data)
-
         print("Optimizing ... ", end = "")
         t_start = time.perf_counter()
         
