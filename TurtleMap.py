@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import math
 import numpy as np
 import matplotlib.pyplot as plt
 import collections
@@ -9,11 +10,15 @@ import TurtleUtils
 from sklearn.cluster import DBSCAN
 
 class TurtlebotMap:
-    def __init__(self, filter_eps = 0.85, filter_min_samples = 5):
+    def __init__(self):
         self.reset()
 
-        self.filter_eps = filter_eps
-        self.filter_min_samples = filter_min_samples
+        # DBSCAN filter parameters
+        self.filter_eps = 0.85
+        self.filter_min_samples = 5
+
+        # Downsampling parameters
+        self.cell_size = 0.1
 
     def reset(self):
         self._points = None
@@ -70,3 +75,40 @@ class TurtlebotMap:
                         key = lambda x: x[1], reverse = True)[0][0]
         
         return self._points.T[np.where(dbscan.labels_ == most_common_label)].T
+    
+    @property
+    def points_downsampled(self):
+        if self._points is None:
+            return None
+        
+        # Work with filtered points only
+        points = self.points_filtered
+
+        # Find the bounding box of the points
+        x_min, x_max = np.min(points[0]), np.max(points[0])
+        y_min, y_max = np.min(points[1]), np.max(points[1])
+
+        # Grid size
+        num_vox_x = int(math.ceil((x_max - x_min) / self.cell_size))
+        num_vox_y = int(math.ceil((y_max - y_min) / self.cell_size))
+
+        # Point grid
+        point_grid = np.zeros((num_vox_x, num_vox_y, 2))
+        count_grid = np.zeros((num_vox_x, num_vox_y))
+
+        for i in points.shape[1]:
+            pt = points[i]
+            x_floored = math.floor((pt[0] - x_min) / self.cell_size)
+            y_floored = math.floor((pt[1] - y_min) / self.cell_size)
+
+            point_grid[x_floored, y_floored] += pt
+            count_grid[x_floored, y_floored] += 1
+
+        downsampled_points = []
+        for i in range(num_vox_x):
+            for j in range(num_vox_y):
+                if count_grid[i, j] == 0:
+                    continue
+                downsampled_points.append(point_grid[i, j] / count_grid[i, j])
+
+        return np.array(downsampled_points).T
