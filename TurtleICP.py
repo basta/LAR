@@ -274,6 +274,7 @@ class GarageModel:
         
         idx = None
         if isinstance(position, np.ndarray):
+            position = TurtleUtils.robot2plt([position])[0]
             position = position.reshape(2,1)
             waypoint_dist = np.linalg.norm(self.waypoints[:,1:] - position, axis = 0)
             idx = np.argmin(waypoint_dist) + 1
