@@ -10,12 +10,12 @@ import TurtleUtils
 from sklearn.cluster import DBSCAN
 
 class TurtlebotMap:
-    def __init__(self):
+    def __init__(self, filter_eps = 0.85, filter_min_samples = 5):
         self.reset()
 
         # DBSCAN filter parameters
-        self.filter_eps = 0.85
-        self.filter_min_samples = 5
+        self.filter_eps = filter_eps
+        self.filter_min_samples = filter_min_samples
 
         # Downsampling parameters
         self.cell_size = 0.1
@@ -63,6 +63,17 @@ class TurtlebotMap:
     def points(self):
         return self._points
     
+    @property
+    def cluster_count(self):
+        if self._points is None:
+            return 0
+        # Find all possible clusters
+        dbscan = DBSCAN(eps = self.filter_eps,
+            min_samples = self.filter_min_samples).fit(self._points.T)
+        # Remove outliers
+        label_counter = collections.Counter(dbscan.labels_[dbscan.labels_ >= 0])
+        return len(label_counter)
+
     @property
     def points_filtered(self):
         if self._points is None:
