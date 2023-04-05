@@ -5,6 +5,12 @@ import math, time, cv2
 
 import TurtleUtils
 
+YELLOW_HSV_MID =  np.array([30, 170, 170])
+YELLOW_HSV_RANGE = np.array([7, 100, 100])
+
+PURPLE_HSV_MID = np.array([128, 170, 170])
+PURPLE_HSV_RANGE = np.array([23, 100, 100])
+
 class TurtlebotVision:
     def __init__(self, turtle):
         self.turtle = turtle
@@ -14,12 +20,12 @@ class TurtlebotVision:
         self.lower_pixel = 200
         
         # Yellow HSV 
-        self.yellow_hsv_lower = np.array([8, 100, 120])
-        self.yellow_hsv_upper = np.array([50, 255, 220])
+        self.yellow_hsv_lower = YELLOW_HSV_MID - YELLOW_HSV_RANGE
+        self.yellow_hsv_upper = YELLOW_HSV_MID + YELLOW_HSV_RANGE
         
-        # Purple HSV [115 169 119]
-        self.purple_hsv_lower = np.array([100, 130, 80])
-        self.purple_hsv_upper = np.array([145, 210, 150])
+        # Purple HSV 
+        self.purple_hsv_lower = PURPLE_HSV_MID - PURPLE_HSV_RANGE
+        self.purple_hsv_upper = PURPLE_HSV_MID + PURPLE_HSV_RANGE
         
         # Image data
         self.img_width = 640
