@@ -10,7 +10,6 @@ from IPython.display import HTML
 
 # Utilities
 from TurtleUtils import R, plot_fitted_garage, plt2robot
-from TurtleControllers import TurtlebotController
 
 class TurtlebotICP:
     def __init__(self):
@@ -119,7 +118,7 @@ class TurtlebotICP:
                     continue
                     
                 angle = abs_angle * (-1)**(i)
-                
+
                 print("Angle", angle)
                 # Optimize over garage initial configurations
                 for left, back, right in itertools.product([0, 1], repeat=3):
@@ -147,6 +146,10 @@ class TurtlebotICP:
 class GarageModel:
     def __init__(self, params):
         HEIGHT, WIDTH = params["height"], params["width"]
+
+        self.left_init = params["left"]
+        self.right_init = params["right"]
+        self.back_init = params["back"]
         
         # Garage:
         # LF        RF
@@ -163,13 +166,14 @@ class GarageModel:
         ])
         
         CLEARANCE = 0.7
+        CLEARANCE_SCAN = 1.5 * CLEARANCE
         
         ## Waypoints
         # 0. Garage mid-points
         gmp = np.array([np.mean(self.corners[0,:]), np.mean(self.corners[1,:])]).reshape(2,1)
         
         # 1. Pre-Garage
-        ent = np.array([np.mean(self.corners[0,:]), HEIGHT + 1.5 * CLEARANCE]).reshape(2,1)
+        ent = np.array([np.mean(self.corners[0,:]), HEIGHT + CLEARANCE_SCAN]).reshape(2,1)
         
         # 2.
         p2 = np.array([0.0, HEIGHT + CLEARANCE]).reshape(2,1)
@@ -182,20 +186,29 @@ class GarageModel:
         
         # 5.
         p5 = np.array([WIDTH + CLEARANCE, HEIGHT]).reshape(2,1)
-        
+
         # 6.
-        p6 = np.array([-CLEARANCE, 0]).reshape(2,1)
-        
+        p6 = np.array([-CLEARANCE_SCAN, np.mean(self.corners[1,:])]).reshape(2,1)
+
         # 7.
-        p7 = np.array([WIDTH + CLEARANCE, 0]).reshape(2,1)
+        p7 = np.array([WIDTH + CLEARANCE_SCAN, np.mean(self.corners[1,:])]).reshape(2,1)
         
         # 8.
-        p8 = np.array([0, -CLEARANCE]).reshape(2,1)
+        p8 = np.array([-CLEARANCE, 0]).reshape(2,1)
         
         # 9.
-        p9 = np.array([WIDTH, -CLEARANCE]).reshape(2,1)
+        p9 = np.array([WIDTH + CLEARANCE, 0]).reshape(2,1)
         
-        self.waypoints = np.hstack((gmp, ent, p2, p3, p4, p5, p6, p7, p8, p9))
+        # 10.
+        p10 = np.array([0, -CLEARANCE]).reshape(2,1)
+        
+        # 11.
+        p11 = np.array([WIDTH, -CLEARANCE]).reshape(2,1)
+
+        # 12.
+        p12 = np.array([np.mean(self.corners[0,:]), -CLEARANCE_SCAN]).reshape(2,1)
+        
+        self.waypoints = np.hstack((gmp, ent, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12))
         
         # Generate sampled garage model
         self.sampled = self._sample_garage(params)
@@ -205,7 +218,7 @@ class GarageModel:
         self.apply_translation(params["translation"])
         
         # Route to the garage
-        self.route = {8:6, 6:4, 4:2, 2:1, 9:7, 7:5, 5:3, 3:1}
+        self.route = {12:10, 10:8, 8:6, 6:4, 4:2, 2:1, 11:9, 9:7, 7:5, 5:3, 3:1, 1:0}
         
     def _sample_garage(self, params):
         HEIGHT, WIDTH = params["height"], params["width"]
@@ -266,8 +279,12 @@ class GarageModel:
             idx = np.argmin(waypoint_dist)
         elif isinstance(position, (np.int64, np.int32, int)):
             idx = self.route[position]
+
+        should_scan = idx == 12 and not self.back_init
+        should_scan |= idx == 6 and not self.left_init
+        should_scan |= idx == 7 and not self.right_init
             
-        return plt2robot([self.waypoints[:,idx]])[0] , idx
+        return plt2robot([self.waypoints[:,idx]])[0] , idx, should_scan
     
 class Optimum:
     def __init__(self, P_values, cost, corresp_values, garage, Q):

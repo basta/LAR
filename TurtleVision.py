@@ -112,8 +112,9 @@ class TurtlebotVision:
         p_mid = p - self.img_width // 2
         return math.atan(p_mid / self.p2a)
     
-    def sample_garage(self, color = "yellow", sampling_step = 20, r2p = False):
-        regions = self.get_regions(color = color)
+    def sample_garage(self, color = "yellow", sampling_step = 20, minimal_size = 10, 
+                       r2p = False):
+        regions = self.get_regions(color = color, minimal_size = minimal_size)
         depth_img_strip = self.get_depth_image_strip_filtered()
         points = list()
         for start_idx, stop_idx, _ in regions:
