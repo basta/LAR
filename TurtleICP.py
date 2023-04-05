@@ -9,7 +9,7 @@ from matplotlib import animation
 from IPython.display import HTML
 
 # Utilities
-from TurtleUtils import R, plot_fitted_garage, plt2robot
+from TurtleUtils import R, plot_fitted_garage, plt2robot, robot2plt
 
 class TurtlebotICP:
     def __init__(self):
@@ -274,8 +274,9 @@ class GarageModel:
         
         idx = None
         if isinstance(position, np.ndarray):
-            position = position.reshape(2,1)
-            waypoint_dist = np.linalg.norm(self.waypoints[:,1:] - position, axis = 0)
+            position_plt = robot2plt([position])[0]
+            position_plt = position_plt.reshape(2,1)
+            waypoint_dist = np.linalg.norm(self.waypoints[:,1:] - position_plt, axis = 0)
             idx = np.argmin(waypoint_dist) + 1
         elif isinstance(position, (np.int64, np.int32, int)):
             idx = self.route[position]
