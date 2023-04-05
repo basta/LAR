@@ -275,8 +275,8 @@ class GarageModel:
         idx = None
         if isinstance(position, np.ndarray):
             position = position.reshape(2,1)
-            waypoint_dist = np.linalg.norm(self.waypoints - position, axis = 0)
-            idx = np.argmin(waypoint_dist)
+            waypoint_dist = np.linalg.norm(self.waypoints[:,1:] - position, axis = 0)
+            idx = np.argmin(waypoint_dist) + 1
         elif isinstance(position, (np.int64, np.int32, int)):
             idx = self.route[position]
 
