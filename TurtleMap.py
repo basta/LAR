@@ -108,7 +108,7 @@ class TurtlebotMap:
         count_grid = np.zeros((num_vox_x, num_vox_y))
 
         for i in range(points.shape[1]):
-            pt = points[i]
+            pt = points[:,i]
             x_floored = math.floor((pt[0] - x_min) / self.cell_size)
             y_floored = math.floor((pt[1] - y_min) / self.cell_size)
 
