@@ -10,7 +10,7 @@ import TurtleUtils
 from sklearn.cluster import DBSCAN
 
 class TurtlebotMap:
-    def __init__(self, filter_eps = 0.85, filter_min_samples = 5):
+    def __init__(self, filter_eps = 0.35, filter_min_samples = 2):
         self.reset()
 
         # DBSCAN filter parameters
