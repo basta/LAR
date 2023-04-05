@@ -59,6 +59,14 @@ def robot2plt(points):
 def plt2robot(points):
     return [np.array([p[1], -p[0]]) for p in points]
 
+def robot2plt_numpy(points):
+    """
+    points.shape = (2,N)
+    """
+    for i in range(points.shape[1]):
+        points[:,i] = np.array([-points[1,i], points[0,i]])
+    return points
+
 def plot_data(data, labels, walls = None ,xlim = (-2, 2), ylim = (-2,2), figsize = (10, 4)):
     assert len(data) == len(labels)
     
