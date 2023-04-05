@@ -4,6 +4,12 @@
 ``` bash
 ssh -X -L 8888:localhost:8888 username@192.168.210.xx
 ```
+
+### To install jupyter notebook:
+```bash
+pip3 install notebook
+```
+
 ### Run this in your *first* terminal
 ``` bash
 mount /local
