@@ -5,30 +5,12 @@
       <list>
         <JupyterConnectionParameters>
           <option name="authType" value="notebook" />
-          <option name="urlString" value="http://localhost:8888" />
-          <authParams2>
-            <map />
-          </authParams2>
-        </JupyterConnectionParameters>
-        <JupyterConnectionParameters>
-          <option name="authType" value="notebook" />
           <option name="urlString" value="http://localhost:8889" />
           <authParams2>
             <map />
           </authParams2>
         </JupyterConnectionParameters>
       </list>
-    </option>
-    <option name="moduleParameters">
-      <map>
-        <entry key="$APPLICATION_CONFIG_DIR$/projects/workspace/.idea/workspace.iml">
-          <value>
-            <JupyterConnectionParameters>
-              <option name="managed" value="true" />
-            </JupyterConnectionParameters>
-          </value>
-        </entry>
-      </map>
     </option>
   </component>
 </project>
