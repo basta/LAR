@@ -137,7 +137,7 @@ class TurtlebotICP:
                     P_values, cost, corresp_values = self.icp_svd(garage, data)
 
                     # Tom's trick
-                    BM = garage.BM
+                    BM = garage.BM.reshape(2)
                     G = garage.waypoints[:,0]
                     q1 = get_quadrant(G)
                     q2 = get_quadrant(G - BM)
