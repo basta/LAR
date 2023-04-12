@@ -51,17 +51,19 @@ class TurtlebotController:
         self.max_linear_rate = 0.15
         self.min_linear_rate = 0.01
         
-    def rotate(self, goal_yaw, relative = False, tol = 1e-3):
+    def rotate(self, goal_yaw, relative = False, tol = 1e-3, max_speed = None):
         _, current_yaw = self.get_odometry()
         if relative:
             goal_yaw += current_yaw
         yaw_error = angle_diff(current_yaw, goal_yaw)
         
+        max_speed = max_speed if max_speed is not None else self.max_yaw_rate
+
         while abs(yaw_error) > tol:
             if yaw_error < 0.0:
-                yaw_error = np.clip(yaw_error, -self.max_yaw_rate, -self.min_yaw_rate)
+                yaw_error = np.clip(yaw_error, -max_speed, -self.min_yaw_rate)
             else:
-                yaw_error = np.clip(yaw_error, self.min_yaw_rate, self.max_yaw_rate)
+                yaw_error = np.clip(yaw_error, self.min_yaw_rate, max_speed)
                 
             self.turtle.cmd_velocity(linear = 0.0, angular = yaw_error)
             self.rate.sleep()
