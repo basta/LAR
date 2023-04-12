@@ -27,5 +27,5 @@ git clone https://github.com/basta/LAR.git --branch final_task2
 ~/.local/bin/jupyter-notebook --NotebookApp.token='' --NotebookApp.password=''
 ```
 
-## Finite-State-Machine architecture
+## Finite-State-Machine architecture for Task 2
 ![plot](./fsm.jpg)
