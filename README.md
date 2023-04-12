@@ -28,6 +28,4 @@ git clone https://github.com/basta/LAR.git --branch final_task2
 ```
 
 ## Finite-State-Machine architecture
-<p align="center">  
-    ![plot](./fsm.jpg)
-</p>
+![plot](./fsm.jpg)
