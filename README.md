@@ -26,3 +26,8 @@ cd && mkdir lar && cd lar
 git clone https://github.com/basta/LAR.git --branch final_task2
 ~/.local/bin/jupyter-notebook --NotebookApp.token='' --NotebookApp.password=''
 ```
+
+## Finite-State-Machine architecture
+<p align="center">  
+    ![plot](./fsm.jpg)
+</p>
