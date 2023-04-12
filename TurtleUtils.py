@@ -137,3 +137,16 @@ def visualize_garage(ax, P1B = None, P2B = None, P_G = None, P_PG = None, P_GOAL
     if P_GOAL is not None:
         circle6 = plt.Circle((-P_GOAL[1], P_GOAL[0]), 0.04, color='yellow')
         ax.add_patch(circle6)
+
+def get_quadrant(pt):
+    x, y = pt[0], pt[1]
+    if x >= 0 and y >= 0:
+        return 1
+    elif x < 0 and y >= 0:
+        return 2
+    elif x < 0 and y < 0:
+        return 3
+    elif x >= 0 and y < 0:
+        return 4
+    else:
+        return 0

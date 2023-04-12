@@ -9,7 +9,7 @@ from matplotlib import animation
 from IPython.display import HTML
 
 # Utilities
-from TurtleUtils import R, plot_fitted_garage, plt2robot, robot2plt
+from TurtleUtils import R, plot_fitted_garage, plt2robot, robot2plt, get_quadrant
 
 class TurtlebotICP:
     def __init__(self):
@@ -133,7 +133,17 @@ class TurtlebotICP:
 
                     garage = GarageModel(parameters)
 
+
                     P_values, cost, corresp_values = self.icp_svd(garage, data)
+
+                    # Tom's trick
+                    BM = garage.BM
+                    G = garage.waypoints[:,0]
+                    q1 = get_quadrant(G)
+                    q2 = get_quadrant(G - BM)
+
+                    if q1 != q2:
+                        cost += float('inf')
 
                     if optimum is None or cost < optimum.cost:
                         optimum = Optimum(P_values, cost, corresp_values, garage, data)
@@ -155,7 +165,7 @@ class GarageModel:
         # LF        RF
         # |         |
         # |         |
-        # LB ----- RB
+        # LB --BM-- RB
         
         # LF, LB, RB, RF
         # | 
@@ -164,9 +174,11 @@ class GarageModel:
             [0.0, WIDTH, 0.0,    WIDTH],
             [0.0, 0.0,   HEIGHT, HEIGHT]
         ])
-        
+
+        self.BM = np.array([WIDTH/2, 0]).reshape(2,1)
+
         CLEARANCE = 0.7
-        CLEARANCE_SCAN = 1.5 * CLEARANCE
+        CLEARANCE_SCAN = 1.2 * CLEARANCE
         
         ## Waypoints
         # 0. Garage mid-points
@@ -260,11 +272,13 @@ class GarageModel:
         self.corners = rot @ self.corners
         self.waypoints = rot @ self.waypoints
         self.sampled = rot @ self.sampled
+        self.BM = rot @ self.BM
         
     def apply_translation(self, t):
         self.corners += t
         self.waypoints += t
         self.sampled += t
+        self.BM += t
         
     def closest_waypoint(self, position):
             
