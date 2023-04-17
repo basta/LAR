@@ -1,7 +1,5 @@
-import time,math,random
-import itertools, collections, functools
+import time, math, itertools
 import numpy as np
-from sklearn.cluster import DBSCAN
 
 # Visualization
 import matplotlib.pyplot as plt
@@ -9,58 +7,13 @@ from matplotlib import animation
 from IPython.display import HTML
 
 # Utilities
-from TurtleUtils import R, plot_fitted_garage, plt2robot, robot2plt, get_quadrant
+from TurtleUtils import R, plt2robot, robot2plt, get_quadrant
 
 class TurtlebotICP:
     def __init__(self):
         # ICP iterations
-        self.max_iters = 10
+        self.max_iters = 21
         
-        # Max distance, to filter out outliers
-        self.threshold = 0.75
-    
-    def kernel(self, error):
-        return 1.0 if np.linalg.norm(error) < self.threshold else 0.0
-    
-    def icp_svd(self, garage_model, Q):
-        # ICP using SVD
-        center_of_Q, Q_centered = self.center_data(Q)
-        cost = None
-        P_values = [garage_model.sampled.copy()]
-        corresp_values = []
-        exclude_indices = []
-        
-        def closest_point(data, point):
-            delta = data - np.reshape(point, (-1, 1))
-            norms = np.linalg.norm(delta, axis = 0)
-            return np.min(norms)
-    
-        cost_angle = 0
-        for i in range(self.max_iters):
-            center_of_P, P_centered = self.center_data(garage_model.sampled, exclude_indices=exclude_indices)
-            correspondences = self.get_correspondence_indices(P_centered, Q_centered)
-            corresp_values.append(correspondences)
-            cost = np.linalg.norm(P_centered - Q_centered)
-            
-            
-            if i == self.max_iters - 1:
-                g = (closest_point(P_centered, Q_centered[:,i])**2 for i in range(P_centered.shape[1]))
-#                 g_minor = (closest_point(Q_centered, garage_model.corners[:,i]) * 0.0001 for i in range(4))
-                cost = sum(g) #+ sum(g_minor)
-            
-            cov, exclude_indices = self.compute_cross_covariance(P_centered, Q_centered, correspondences)
-            U, S, V_T = np.linalg.svd(cov)
-            R = U.dot(V_T) 
-            
-            cost_angle += abs(math.degrees(math.atan2(R[0,0], R[1,0])) * 0.0001)
-            
-            t = center_of_Q - R.dot(center_of_P)  
-            garage_model.apply_rotation(R)
-            garage_model.apply_translation(t)
-            P_values.append(garage_model.sampled.copy())
-        corresp_values.append(corresp_values[-1])
-        return P_values, cost, corresp_values
-
     def get_correspondence_indices(self,P, Q):
         # For each point in P, find the closest point in Q
         p_size = P.shape[1]
@@ -68,15 +21,8 @@ class TurtlebotICP:
         correspondences = []
         for i in range(p_size):
             p_point = P[:, i]
-            min_dist = float('inf')
-            chosen_idx = -1
-            for j in range(q_size):
-                q_point = Q[:, j]
-                dist = np.linalg.norm(q_point - p_point)
-                if dist < min_dist:
-                    min_dist = dist
-                    chosen_idx = j
-            correspondences.append((i, chosen_idx))
+            j = np.argmin(np.linalg.norm(Q - p_point.reshape(2,1), axis=0))
+            correspondences.append((i, j))
         return correspondences
 
     def error(self, x, p_point, q_point):
@@ -85,29 +31,13 @@ class TurtlebotICP:
         prediction = rotation.dot(p_point) + translation
         return prediction - q_point
 
-    def center_data(self,data, exclude_indices=[]):
-        reduced_data = np.delete(data, exclude_indices, axis=1)
-        center = np.array([reduced_data.mean(axis=1)]).T
-        return center, data - center
-
-    def compute_cross_covariance(self,P, Q, correspondences):
-        cov = np.zeros((2, 2))
-        exclude_indices = []
-        for i, j in correspondences:
-            p_point = P[:, [i]]
-            q_point = Q[:, [j]]
-            weight = self.kernel(p_point - q_point)
-            if weight < 0.01: exclude_indices.append(i)
-            cov += weight * q_point.dot(p_point.T)
-        return cov, exclude_indices
-    
-    def optimize(self,data):
+    def optimize(self,data, method = "SVD", extra_points = 0):
         MIN_ANGLE = 0
         MAX_ANGLE = 121
-        ANGLE_STEP = 60
+        ANGLE_STEP = 30
         optimum = None
         
-        print("Optimizing ... ", end = "")
+        print("Optimizing ... ")
         t_start = time.perf_counter()
         
         # Optimize over initial garage orientations
@@ -119,22 +49,28 @@ class TurtlebotICP:
                     
                 angle = abs_angle * (-1)**(i)
 
-                print("Angle", angle)
+                print(f"Optimizing with initial angle {angle} degrees ...")
+
                 # Optimize over garage initial configurations
                 for left, back, right in itertools.product([0, 1], repeat=3):
                     if not sum((left, back, right)):
                         continue
+                    
                     if sum((left , back , right)) == 1 and (left or right):
                         continue
-
+                        
                     parameters = {"rotation" : angle, "degrees" : True, "translation" : np.zeros(shape = (2,1)),
-                                  "left" : left, "right" : right, "back" : back, "N" : data.shape[1],
-                                  "height" : 0.49, "width" : 0.59}
+                                  "left" : left, "right" : right, "back" : back, "N" : data.shape[1] + extra_points,
+                                  "height" : 0.49 - 0.07, "width" : 0.59 - 0.07}
 
+                    # Move garage towards the center of the data
                     garage = GarageModel(parameters)
-
-
-                    P_values, cost, corresp_values = self.icp_svd(garage, data)
+                    mean = np.mean(data, axis = 1).reshape(2,1)
+                    garage_g = garage.waypoints[:,0].reshape(2,1)
+                    garage.apply_translation(-garage_g + mean)
+                    
+                    # Optimize
+                    P_values, cost, corresp_values = self.icp_least_squares(garage, data)
 
                     # Tom's trick
                     BM = garage.BM.reshape(2)
@@ -142,7 +78,7 @@ class TurtlebotICP:
                     q1 = get_quadrant(G)
                     q2 = get_quadrant(G - BM)
 
-                    if q1 != q2:
+                    if q1 != q2 and sum((left, right, back)) == 1:
                         cost += float('inf')
 
                     if optimum is None or cost < optimum.cost:
@@ -152,6 +88,76 @@ class TurtlebotICP:
         print("Done")
         print(f"Optimization time: {t_finish - t_start:.2f} s")
         return optimum
+    
+    def prepare_system(self, x, garage, Q, correspondences):
+        P = garage.sampled
+        H = np.zeros((3, 3))
+        g = np.zeros((3, 1))
+        chi = 0
+
+        def kernel(x):
+            return 1 if np.linalg.norm(x) < 3.0 else 0
+
+        for i, j in correspondences:
+            p_point = P[:, [i]]
+            q_point = Q[:, [j]]
+            e = self.error(x, p_point, q_point)
+            weight = kernel(e) 
+            if weight != 0:
+                J = self.jacobian(x, p_point)
+                H += weight * J.T.dot(J)
+                g += weight * J.T.dot(e)
+                chi += e.T * e
+        return H, g
+    
+    def icp_least_squares(self,garage_model, Q):
+        x = np.zeros((3, 1))
+        x_values = [x.copy()]  # Initial value for transformation.
+        P_values = [garage_model.sampled.copy()]
+        corresp_values = []
+        for i in range(self.max_iters):
+            rot = R(x[2])
+            t = x[0:2]
+            correspondences = self.get_correspondence_indices(garage_model.sampled, Q)
+            corresp_values.append(correspondences)
+            correspondences2 = self.get_correspondence_indices(Q, garage_model.sampled)
+            correspondences2 = [(a,b) for b,a in correspondences2]
+            correspondences.extend(correspondences2)
+            H, g = self.prepare_system(x, garage_model, Q, correspondences)
+            dx = np.linalg.lstsq(H, -g, rcond=None)[0]
+            x += dx
+            x[2] = math.atan2(math.sin(x[2]), math.cos(x[2])) # normalize angle
+            x_values.append(x.copy())
+            rot = R(x[2])
+            t = x[0:2]
+            garage_model.apply_rotation(rot)
+            garage_model.apply_translation(t)
+            P_values.append(garage_model.sampled.copy())
+        corresp_values.append(corresp_values[-1])
+    
+        def closest_point(data, point):
+                delta = data - point.reshape(2,1)
+                norms = np.linalg.norm(delta, axis = 0)
+                return np.min(norms)
+
+        # Total cost
+        cost_g = (closest_point(garage_model.sampled, Q[:,i])**2 for i in range(Q.shape[1]))
+        cost = sum(cost_g)
+
+        return P_values, cost, corresp_values
+
+    def jacobian(self,x, p_point):
+        theta = x[2]
+        J = np.zeros((2, 3))
+        J[0:2, 0:2] = np.identity(2)
+        dR = np.array([[0, -1], [1, 0]])
+        J[0:2, [2]] = (self.dR(theta)).dot(p_point)
+        return J
+
+    def dR(self,theta):
+        s, c = math.sin(theta), math.cos(theta)
+        return np.array([[-s, -c],
+                         [c,  -s]])
     
 class GarageModel:
     def __init__(self, params):
@@ -175,52 +181,39 @@ class GarageModel:
             [0.0, 0.0,   HEIGHT, HEIGHT]
         ])
 
+        CLEARANCE = 0.4
+        
         self.BM = np.array([WIDTH/2, 0]).reshape(2,1)
-
-        CLEARANCE = 0.7
-        CLEARANCE_SCAN = 1.2 * CLEARANCE
         
         ## Waypoints
         # 0. Garage mid-points
-        gmp = np.array([np.mean(self.corners[0,:]), np.mean(self.corners[1,:])]).reshape(2,1)
+        self.gmp = np.array([np.mean(self.corners[0,:]), np.mean(self.corners[1,:])]).reshape(2,1)
         
         # 1. Pre-Garage
-        ent = np.array([np.mean(self.corners[0,:]), HEIGHT + CLEARANCE_SCAN]).reshape(2,1)
+        ent = np.array([np.mean(self.corners[0,:]), HEIGHT + CLEARANCE]).reshape(2,1)
         
         # 2.
-        p2 = np.array([0.0, HEIGHT + CLEARANCE]).reshape(2,1)
+        p2 = np.array([-CLEARANCE, HEIGHT + CLEARANCE]).reshape(2,1)
         
         # 3.
-        p3 = np.array([WIDTH, HEIGHT + CLEARANCE]).reshape(2,1)
+        p3 = np.array([WIDTH + CLEARANCE, HEIGHT + CLEARANCE]).reshape(2,1)
         
         # 4.
-        p4 = np.array([-CLEARANCE, HEIGHT]).reshape(2,1)
+        p4 = np.array([-CLEARANCE, HEIGHT/2]).reshape(2,1)
         
         # 5.
-        p5 = np.array([WIDTH + CLEARANCE, HEIGHT]).reshape(2,1)
+        p5 = np.array([WIDTH + CLEARANCE, HEIGHT/2]).reshape(2,1)
 
         # 6.
-        p6 = np.array([-CLEARANCE_SCAN, np.mean(self.corners[1,:])]).reshape(2,1)
+        p6 = np.array([-CLEARANCE, -CLEARANCE]).reshape(2,1)
 
         # 7.
-        p7 = np.array([WIDTH + CLEARANCE_SCAN, np.mean(self.corners[1,:])]).reshape(2,1)
+        p7 = np.array([WIDTH + CLEARANCE, -CLEARANCE]).reshape(2,1)
         
         # 8.
-        p8 = np.array([-CLEARANCE, 0]).reshape(2,1)
+        p8 = np.array([WIDTH / 2, -CLEARANCE]).reshape(2,1)
         
-        # 9.
-        p9 = np.array([WIDTH + CLEARANCE, 0]).reshape(2,1)
-        
-        # 10.
-        p10 = np.array([0, -CLEARANCE]).reshape(2,1)
-        
-        # 11.
-        p11 = np.array([WIDTH, -CLEARANCE]).reshape(2,1)
-
-        # 12.
-        p12 = np.array([np.mean(self.corners[0,:]), -CLEARANCE_SCAN]).reshape(2,1)
-        
-        self.waypoints = np.hstack((gmp, ent, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12))
+        self.waypoints = np.hstack((self.gmp.copy(), ent, p2, p3, p4, p5, p6, p7, p8))
         
         # Generate sampled garage model
         self.sampled = self._sample_garage(params)
@@ -230,7 +223,7 @@ class GarageModel:
         self.apply_translation(params["translation"])
         
         # Route to the garage
-        self.route = {12:10, 10:8, 8:6, 6:4, 4:2, 2:1, 11:9, 9:7, 7:5, 5:3, 3:1, 1:0}
+        self.route = {8:6, 6:4, 4:2, 2:1, 7:5, 5:3, 3:1, 1:0}
         
     def _sample_garage(self, params):
         HEIGHT, WIDTH = params["height"], params["width"]
@@ -272,17 +265,19 @@ class GarageModel:
         self.corners = rot @ self.corners
         self.waypoints = rot @ self.waypoints
         self.sampled = rot @ self.sampled
+        self.gmp = rot @ self.gmp
         self.BM = rot @ self.BM
         
     def apply_translation(self, t):
         self.corners += t
         self.waypoints += t
         self.sampled += t
+        self.gmp += t
         self.BM += t
         
     def closest_waypoint(self, position):
             
-        # God odometry
+        # Got odometry
         if isinstance(position, tuple):
             position = position[0]
         
@@ -295,9 +290,7 @@ class GarageModel:
         elif isinstance(position, (np.int64, np.int32, int)):
             idx = self.route[position]
 
-        should_scan = idx == 12 and not self.back_init
-        should_scan |= idx == 6 and not self.left_init
-        should_scan |= idx == 7 and not self.right_init
+        should_scan = idx in [1,2,3,6,7]
             
         return plt2robot([self.waypoints[:,idx]])[0] , idx, should_scan
     

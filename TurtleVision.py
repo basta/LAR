@@ -6,10 +6,10 @@ import math, time, cv2
 import TurtleUtils
 
 YELLOW_HSV_MID =  np.array([30, 170, 170])
-YELLOW_HSV_RANGE = np.array([7, 100, 100])
+YELLOW_HSV_RANGE = np.array([10,100,172])
 
 PURPLE_HSV_MID = np.array([128, 170, 170])
-PURPLE_HSV_RANGE = np.array([23, 100, 100])
+PURPLE_HSV_RANGE = np.array([20,66,159])
 
 class TurtlebotVision:
     def __init__(self, turtle):
@@ -19,13 +19,11 @@ class TurtlebotVision:
         self.upper_pixel = 100
         self.lower_pixel = 200
         
-        # Yellow HSV 
-        self.yellow_hsv_lower = YELLOW_HSV_MID - YELLOW_HSV_RANGE
-        self.yellow_hsv_upper = YELLOW_HSV_MID + YELLOW_HSV_RANGE
+        # Yellow HSV ranges
+        self.set_yellow_range(YELLOW_HSV_MID, YELLOW_HSV_RANGE)
         
-        # Purple HSV 
-        self.purple_hsv_lower = PURPLE_HSV_MID - PURPLE_HSV_RANGE
-        self.purple_hsv_upper = PURPLE_HSV_MID + PURPLE_HSV_RANGE
+        # Purple HSV ranges
+        self.set_purple_range(PURPLE_HSV_MID, PURPLE_HSV_RANGE)
         
         # Image data
         self.img_width = 640
@@ -33,6 +31,14 @@ class TurtlebotVision:
         
         # Pixel to angle conversion constant
         self.p2a = 620
+        
+    def set_yellow_range(self, yellow_mid, yellow_range):
+        self.yellow_hsv_lower = yellow_mid - yellow_range
+        self.yellow_hsv_upper = yellow_mid + yellow_range
+        
+    def set_purple_range(self, purple_mid, purple_range):
+        self.purple_hsv_lower = purple_mid - purple_range
+        self.purple_hsv_upper = purple_mid + purple_range
         
     # ===== Point Cloud =====
     
@@ -164,7 +170,7 @@ class TurtlebotVision:
         n2 = -n1
         
         # Camera offset correction
-        CAMERA_OFFSET = 0.07
+        CAMERA_OFFSET = 0.12
         point_offset = t / np.linalg.norm(t) * CAMERA_OFFSET
         
         # Pre-garage point

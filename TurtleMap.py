@@ -42,10 +42,13 @@ class TurtlebotMap:
         if self._points is None:
             return
         
+        fig, ax = plt.subplots()
+        
         points = self.points
-        plt.scatter(points[0], points[1])
-        plt.xlim([-3,3])
-        plt.ylim([-3,3])
+        ax.scatter(points[0], points[1])
+        ax.grid(True)
+        ax.set_aspect("equal")
+        ax.set(xlim = [-3, 3], ylim = [-3, 3])
         plt.show()
 
     def visualize_filtered(self):
@@ -53,10 +56,13 @@ class TurtlebotMap:
         if self._points is None:
             return
         
+        fig, ax = plt.subplots()
+        
         points = self.points_filtered
-        plt.xlim([-3,3])
-        plt.ylim([-3,3])
-        plt.scatter(points[0], points[1])
+        ax.grid(True)
+        ax.set_aspect("equal")
+        ax.set(xlim = [-3, 3], ylim = [-3, 3])
+        ax.scatter(points[0], points[1])
         plt.show()
 
     @property
@@ -65,27 +71,42 @@ class TurtlebotMap:
     
     @property
     def cluster_count(self):
+        return len(self.clusters)
+    
+    @property
+    def clusters(self):
         if self._points is None:
-            return 0
-        # Find all possible clusters
+            return []
         dbscan = DBSCAN(eps = self.filter_eps,
             min_samples = self.filter_min_samples).fit(self._points.T)
+        
         # Remove outliers
         label_counter = collections.Counter(dbscan.labels_[dbscan.labels_ >= 0])
-        return len(label_counter)
-
+        
+        # Store all clusters in a list
+        clusters = list()
+        for key, _ in label_counter.items():
+            c = self._points[:,np.where(dbscan.labels_ == key)]
+            clusters.append(c)
+        return clusters
+    
     @property
     def points_filtered(self):
         if self._points is None:
             return None
 
+        ## Remove outliers
         dbscan = DBSCAN(eps = self.filter_eps,
             min_samples = self.filter_min_samples).fit(self._points.T)
         label_counter = collections.Counter(dbscan.labels_)
         most_common_label = sorted(list(label_counter.items()),
                         key = lambda x: x[1], reverse = True)[0][0]
+        filtered_points = self._points.T[np.where(dbscan.labels_ == most_common_label)].T
+
+        ## Remove any clusters far away from the origin
+        filtered_points = filtered_points[:,np.linalg.norm(filtered_points, axis = 0) < 3.39]
         
-        return self._points.T[np.where(dbscan.labels_ == most_common_label)].T
+        return filtered_points
     
     @property
     def points_downsampled(self):

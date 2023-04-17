@@ -67,7 +67,7 @@ def robot2plt_numpy(points):
         points[:,i] = np.array([-points[1,i], points[0,i]])
     return points
 
-def plot_data(data, labels, walls = None ,xlim = (-2, 2), ylim = (-2,2), figsize = (10, 4)):
+def plot_data(data, labels, walls = None ,xlim = (-2, 2), ylim = (-2,2), figsize = (16, 6)):
     assert len(data) == len(labels)
     
     # Create a new figure
@@ -99,9 +99,9 @@ def plot_fitted_garage(garage, data,xlim = (-2.5, 2.5), ylim = (-2.5, 2.5), figs
     ])
     ax = plot_data(d,l, walls, xlim = xlim, ylim = ylim, figsize = figsize)
     
-def show_img(img):
-    plt.imshow(img)
-    
+def show_img(img, ax = None):
+    fig, ax = plt.subplots()
+    ax.imshow(img)    
     
 def transform_points(points, position, yaw):
     rot = R(yaw)
