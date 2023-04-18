@@ -36,7 +36,7 @@ class TurtlebotOdometry:
         angle = angle + np.pi if angle <= 0.0 else angle - np.pi
         return angle
 
-class TurtlebotController:
+class TurtleDrive:
     def __init__(self, turtle, rate):
         self.turtle = turtle
         self.rate = rate

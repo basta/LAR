@@ -8,7 +8,7 @@ import abc
 from typing import Dict
 
 from robolab_turtlebot import Turtlebot
-from TurtleControllers import TurtlebotController
+from TurtleControllers import TurtleDrive
 from TurtleVision import TurtlebotVision
 from TurtleMap import TurtlebotMap
 from TurtleICP import TurtlebotICP
@@ -383,7 +383,7 @@ class Pycomat(Automat):
     def __init__(self):
         super().__init__([Start, Task2, Scan_T2, Move_T2, Task1, Scan_T1, Move_PG, Move_G, End])
         self.turtle = Turtlebot(rgb=True, pc=True)
-        self.turtle_controller = TurtlebotController(self.turtle, rate=40)
+        self.turtle_controller = TurtleDrive(self.turtle, rate=40)
         self.reset()
         
         self.states["Start"].automat.turtle_controller.turtle.register_button_event_cb(self.button_callback)
