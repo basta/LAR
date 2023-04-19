@@ -204,7 +204,7 @@ class Move_T2(State):
             pt, idx, should_scan = garage.closest_waypoint(odom)
             should_scan = False
 
-            logger.info("Distance to closest point is:", np.linalg.norm(pt - pos))
+            logger.info(f"Distance to closest point is: {np.linalg.norm(pt - pos)} m")
             if np.linalg.norm(pt - pos) < 0.2:
                 go = False
                 should_scan = False
@@ -248,8 +248,7 @@ class Move_T2(State):
         self.automat.can_reset = False
 
         logger.info(
-            "Scanning now:",
-            self.automat.memory.should_scan or self.automat.memory.t2_idx == 1,
+            f"Scanning now: {self.automat.memory.should_scan or self.automat.memory.t2_idx == 1}",
         )
         if self.automat.memory.should_scan or self.automat.memory.t2_idx == 1:
             self.automat.memory.t2_idx = None
@@ -376,7 +375,7 @@ class Scan_T2(State):
         if purple_pts is not None:
             TurtleUtils.plot_data([purple_pts], ["purple points"])
 
-        logger.info("Yellow points shape:", yellow_downsampled.shape)
+        logger.info(f"Yellow points shape: {yellow_downsampled.shape}")
         opt = self.automat.turtle_icp.optimize(yellow_downsampled, method="LS")
         self.automat.memory.garage = opt.garage
 
