@@ -103,7 +103,6 @@ class TurtlebotICP:
         P = garage.sampled
         H = np.zeros((3, 3))
         g = np.zeros((3, 1))
-        chi = 0
 
         def kernel(x):
             return 1 if np.linalg.norm(x) < 3.0 else 0
@@ -117,7 +116,6 @@ class TurtlebotICP:
                 J = self.jacobian(x, p_point)
                 H += weight * J.T.dot(J)
                 g += weight * J.T.dot(e)
-                chi += e.T * e
         return H, g
 
     def icp_least_squares(self, garage_model, Q):
@@ -162,7 +160,6 @@ class TurtlebotICP:
         theta = x[2]
         J = np.zeros((2, 3))
         J[0:2, 0:2] = np.identity(2)
-        dR = np.array([[0, -1], [1, 0]])
         J[0:2, [2]] = (self.dR(theta)).dot(p_point)
         return J
 
