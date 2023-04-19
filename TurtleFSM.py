@@ -16,6 +16,7 @@ import TurtleUtils
 import time
 import loggingSetup
 import logging
+
 logger = logging.getLogger("robot")
 
 class State(abc.ABC):
@@ -25,7 +26,7 @@ class State(abc.ABC):
         self.automat = automat
 
     def execute(self) -> "State":
-        print(f"Executing {self.name}")
+        logger.info(f"Executing {self.name}")
         self.action()
         return self.get_next_state()
 
@@ -54,7 +55,7 @@ class End(State):
 
     def action(self):
         self.automat.turtle_controller.turtle.play_sound(5)
-        print("Done")
+        logger.info("Problem solved!")
 
 class Move_PG(State):
     name = "Move_PG"
@@ -179,18 +180,18 @@ class Move_T2(State):
             pt, idx, should_scan = garage.closest_waypoint(odom)
             should_scan = False
             
-            print("Distance to closest point is:", np.linalg.norm(pt - pos))
+            logger.info("Distance to closest point is:", np.linalg.norm(pt - pos))
             if np.linalg.norm(pt - pos) < 0.2:
                 go = False
                 should_scan = False
-                print("No need to scan")
+                logger.info("No need to scan")
                 
-            print(f"Moving to point {idx}")
+            logger.info(f"Moving to point {idx}")
         else:
             prev_idx = self.automat.memory.t2_idx
             pt, idx, should_scan = \
                 garage.closest_waypoint(self.automat.memory.t2_idx)
-            print(f"Old point index: {prev_idx}, New point index: {idx}")\
+            logger.info(f"Old point index: {prev_idx}, New point index: {idx}")\
             
         if np.linalg.norm(pt) > 1.5: ## more than 1.5 meters far
             self.automat.memory.reset = True
@@ -201,11 +202,11 @@ class Move_T2(State):
             if idx in [2,3,6,7]:
                 garage_mid = TurtleUtils.plt2robot([self.automat.memory.garage.waypoints[:,0]])[0].reshape(2)
                 self.automat.turtle_controller.face_towards(garage_mid, relative = False)
-                print("Facing towards mid point")
+                logger.info("Facing towards mid point")
                 
             if idx in [1]:
                 waypoint_2 = TurtleUtils.plt2robot([self.automat.memory.garage.waypoints[:,2]])[0].reshape(2)
-                print("Facing towards point 2")
+                logger.info("Facing towards point 2")
                 self.automat.turtle_controller.face_towards(waypoint_2, relative = False)
             
         # Book keeping
@@ -216,16 +217,16 @@ class Move_T2(State):
         
         if self.automat.can_reset and self.automat.memory.reset:
             self.automat.reset()
-            print("Traveled to far, resetting...")
+            logger.warning("Traveled to far, resetting...")
             
         self.automat.can_reset = False
 
-        print("Scanning now:", self.automat.memory.should_scan or self.automat.memory.t2_idx == 1)
+        logger.info("Scanning now:", self.automat.memory.should_scan or self.automat.memory.t2_idx == 1)
         if self.automat.memory.should_scan or self.automat.memory.t2_idx == 1:
             self.automat.memory.t2_idx = None
             return self.automat.states["Task2"]
 
-        print("Moving successful, going to the next point")
+        logger.info("Moving successful, going to the next point")
         return self.automat.states["Move_T2"]
 
 class Scan_T2(State):
@@ -314,7 +315,7 @@ class Scan_T2(State):
             cluster_mids = sorted(cluster_mids, 
                 key = lambda x: np.linalg.norm(position - x))
             
-            print(f"Can see {len(clusters)} clusters")
+            logger.info(f"Can see {len(clusters)} clusters")
             
             TurtleUtils.plot_data(clusters, [f"Purple cluster {i}" for i in range(len(clusters))])
             
@@ -327,7 +328,7 @@ class Scan_T2(State):
             if np.dot(P1, n) < 0:
                 n = -n
             p = cluster2_mid + t/2 + n * 1.5
-            print(f"Moving to point: {p}")
+            logger.info(f"Moving to point: {p}")
             self.automat.turtle_controller.move_to(p, relative = False)
             return self.automat.states["Task1"]
         
@@ -341,7 +342,7 @@ class Scan_T2(State):
         if purple_pts is not None:
             TurtleUtils.plot_data([purple_pts], ["purple points"])
             
-        print("Yellow points shape:", yellow_downsampled.shape)
+        logger.info("Yellow points shape:", yellow_downsampled.shape)
         opt = self.automat.turtle_icp.optimize(yellow_downsampled, method = "LS")
         self.automat.memory.garage = opt.garage
     
@@ -389,7 +390,7 @@ class Pycomat(Automat):
         self.states["Start"].automat.turtle_controller.turtle.register_button_event_cb(self.button_callback)
         self.states["Start"].automat.turtle_controller.turtle.register_bumper_event_cb(self.bumper_callback)
 
-        print("Waiting for button press...")
+        logger.info("Waiting for button press...")
         
     def reset(self):
         self.turtle_vision = TurtlebotVision(self.turtle)
@@ -401,7 +402,7 @@ class Pycomat(Automat):
         
     def button_callback(self, message):
         if not self.states["Start"].automat.memory.button_pressed:
-            print("Button pressed")
+            logger.info("Button pressed")
         self.states["Start"].automat.memory.button_pressed = True
         
     def bumper_callback(self, message):
