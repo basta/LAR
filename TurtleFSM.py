@@ -376,7 +376,7 @@ class Scan_T2(State):
             TurtleUtils.plot_data([purple_pts], ["purple points"])
 
         logger.info(f"Yellow points shape: {yellow_downsampled.shape}")
-        opt = self.automat.turtle_icp.optimize(yellow_downsampled, method="LS")
+        opt = self.automat.turtle_icp.optimize(yellow_downsampled)
         self.automat.memory.garage = opt.garage
 
         # Visualization
