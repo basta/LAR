@@ -453,6 +453,8 @@ class Pycomat(Automat):
         self.states["Start"].automat.memory.button_pressed = True
 
     def bumper_callback(self, message):
+        self.turtle_controller.cmd_velocity(linear = 0, angular = 0)
+        time.sleep(0.005)
         os._exit(1)
 
 
