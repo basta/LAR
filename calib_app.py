@@ -6,6 +6,9 @@ import numpy as np
 from matplotlib import gridspec
 from matplotlib.widgets import TextBox, Button, Slider
 import cv2
+import tkinter as tk
+from tkinter import filedialog
+
 
 DEFAULTS = [
     "30, 170, 170",
@@ -23,11 +26,12 @@ subfigs[0].set_facecolor('0.75')
 
 axs_left = subfigs[0].subplots(5, 1, )
 subfigs_right = subfigs[1].subfigures(2, 1, )  # gridspec_kw={'height_ratios': [5, 1]}
-ax_img_buttons = subfigs_right[1].subplots(1, 2)
+ax_img_buttons = subfigs_right[1].subplots(1, 3)
 axs_images = subfigs_right[0].subplots(1, 3)
 
 images = [img for img in os.listdir("calib_img") if "positive" in img]
-img_picker_prev = Button(ax_img_buttons[1], "Prev")
+img_picker_prev = Button(ax_img_buttons[2], "Prev")
+filedialog_button = Button(ax_img_buttons[1], "File Dialog")
 img_picker_next = Button(ax_img_buttons[0], "Next")
 axs_images[0].imshow(plt.imread("img.png"))
 
@@ -73,7 +77,14 @@ def change_image(val):
     global img_idx
     img_idx = val
     print(f"Showing img: {img_idx}")
+    path = f"calib_img/{images[int(val)]}"
 
+    display_image_from_path(path)
+
+root = tk.Tk()
+root.withdraw()
+
+def display_image_from_path(path):
     hsvs = []
     ranges = []
     for i in range(2):
@@ -97,15 +108,17 @@ def change_image(val):
         uppers.append(upper)
 
     print(f"{lowers=} {uppers=}")
-    axs_images[0].imshow(cv2.cvtColor(cv2.imread(f"calib_img/{images[int(val)]}"), cv2.COLOR_RGB2HSV))
+    axs_images[0].imshow(cv2.cvtColor(cv2.imread(path), cv2.COLOR_RGB2HSV))
     axs_images[1].imshow(
-        get_mask(f"calib_img/{images[int(val)]}", lowers[0], uppers[0])
+        get_mask(path, lowers[0], uppers[0])
     )
     axs_images[2].imshow(
-        get_mask(f"calib_img/{images[int(val)]}", lowers[1], uppers[1])
+        get_mask(path, lowers[1], uppers[1])
     )
     fig.canvas.draw_idle()
 
+
+filedialog_button.on_clicked(lambda event: display_image_from_path(filedialog.askopenfilename()))
 
 submit_button.on_clicked(submit)
 img_picker_prev.on_clicked(lambda event: change_image(img_idx - 1))
