@@ -31,7 +31,7 @@ class TurtlebotICP:
         prediction = rotation.dot(p_point) + translation
         return prediction - q_point
 
-    def optimize(self, data, method="SVD", extra_points=0):
+    def optimize(self, data, extra_points=0):
         MIN_ANGLE = 0
         MAX_ANGLE = 121
         ANGLE_STEP = 30
