@@ -90,71 +90,60 @@ class Scan_T1(State):
 
     def action(self):
         """
-        Find garage entrance
+        Find garage entrance by aligning with purple and yellow markers.
         """
-        PURPLE_MIN_SIZE = 10
-        YELLOW_MIN_SIZE = 30
-
-        def reg_mean(regs):
-            s, n = 0.0, len(regs) * 2
-            for reg in regs:
-                s += reg[0] + reg[1]
-            return s / n
+        CENTERING_ERROR_THRESHOLD = 10  # Pixels
 
         turtle_controller = self.automat.turtle_controller
-        turtle_controller.reset_odometry()
-        time.sleep(0.4)
         turtle_vision = self.automat.turtle_vision
 
-        # Find Garage center
+        turtle_controller.reset_odometry()
+        time.sleep(0.4) # Allow odometry to settle
+
         while True:
+            # Attempt to find garage features and get alignment error.
+            # Uses default min_sizes from TurtleVision.find_garage_alignment_error.
+            alignment_error, status = turtle_vision.find_garage_alignment_error()
 
-            # Find purple stripes
-            regs_purple = turtle_vision.get_regions(
-                color="purple", minimal_size=PURPLE_MIN_SIZE
-            )
-
-            # Find yellow stripe inbetween purple stripes
-            regs_yellow = turtle_vision.get_regions(
-                color="yellow", minimal_size=YELLOW_MIN_SIZE
-            )
-
-            # Want to see two purple pillars and a yellow region inbetween
-            while len(regs_purple) < 2 or len(regs_yellow) == 0:
-                turtle_controller.cmd_velocity(angular=0.5)
-                regs_purple = turtle_vision.get_regions(
-                    color="purple", minimal_size=PURPLE_MIN_SIZE
-                )
-                regs_yellow = turtle_vision.get_regions(
-                    color="yellow", minimal_size=YELLOW_MIN_SIZE
-                )
+            # If features are not sufficient, rotate and try again.
+            while status == "insufficient_regions":
+                logger.info("Insufficient regions for garage alignment, rotating to find.")
+                turtle_controller.cmd_velocity(angular=0.5)  # Rotate to find features.
                 turtle_controller.rate.sleep()
+                alignment_error, status = turtle_vision.find_garage_alignment_error() # Re-attempt.
 
-            # Want to look at the center of the garage entrance
-            purple_mid = reg_mean(regs_purple)
-            err = purple_mid - turtle_vision.img_width // 2
-
-            if abs(err) < 10:
-                # Garage entrance found, stop!
-                break
-            else:
-                if err < 0.0:
-                    err = np.clip(
-                        err,
-                        -turtle_controller.max_yaw_rate,
-                        -turtle_controller.min_yaw_rate,
-                    )
+            if status == "regions_found":
+                if abs(alignment_error) < CENTERING_ERROR_THRESHOLD:
+                    logger.info(f"Garage entrance centered. Error: {alignment_error:.2f} pixels.")
+                    break  # Exit main loop, alignment is good
                 else:
-                    err = np.clip(
-                        err,
-                        turtle_controller.min_yaw_rate,
-                        turtle_controller.max_yaw_rate,
-                    )
-                turtle_controller.cmd_velocity(linear=0, angular=-err)
+                    # Adjust robot orientation based on error
+                    if alignment_error < 0.0: # Target is to the left of image center
+                        # Error is negative. We want positive angular velocity to turn left.
+                        angular_vel_command = np.clip(-alignment_error, # make it positive for clipping range
+                                                      turtle_controller.min_yaw_rate,
+                                                      turtle_controller.max_yaw_rate)
+                    else: # Target is to the right of image center
+                        # Error is positive. We want negative angular velocity to turn right.
+                        angular_vel_command = np.clip(-alignment_error, # make it negative for clipping range
+                                                      -turtle_controller.max_yaw_rate,
+                                                      -turtle_controller.min_yaw_rate)
+                    
+                    logger.info(f"Aligning to garage. Error: {alignment_error:.2f} px. Proposed Angular vel: {angular_vel_command:.2f} rad/s.")
+                    turtle_controller.cmd_velocity(linear=0.0, angular=angular_vel_command)
+            elif status == "insufficient_regions":
+                # This case should ideally be fully handled by the inner loop.
+                # If we reach here, it means after rotating, regions are still not found.
+                logger.warning("Still insufficient regions after rotation attempt. Retrying outer loop.")
+            else:
+                # Handle any other unexpected status from find_garage_alignment_error.
+                logger.error(f"Unexpected status: {status}. Stopping alignment.")
+                break # Safety break.
 
             turtle_controller.rate.sleep()
 
-        turtle_controller.cmd_velocity(linear=0, angular=0)
+        turtle_controller.cmd_velocity(linear=0.0, angular=0.0) # Stop motion.
+        logger.info("Scan_T1 action completed.")
 
     def get_next_state(self):
         def generate_path(turtle_vision, visualize=False):
@@ -261,71 +250,105 @@ class Move_T2(State):
 class Scan_T2(State):
     name = "Scan_T2"
 
-    def see_yellow(self):
-        YELLOW_MIN_SIZE = 100
+    # Local helper methods see_yellow, find_garage, lose_garage_from_sight removed.
+
+    def _perform_360_scan_and_map(self, 
+                                  angles_to_scan, 
+                                  yellow_visibility_min_size,
+                                  yellow_sample_min_size, 
+                                  purple_sample_min_size):
+        logger.info("Starting 360-degree scan and mapping process.")
         turtle_vision = self.automat.turtle_vision
-
-        # Find purple stripes
-        regs_yellow = turtle_vision.get_regions(
-            color="yellow", minimal_size=YELLOW_MIN_SIZE
-        )
-
-        return len(regs_yellow) > 0
-
-    def find_garage(self):
         turtle_controller = self.automat.turtle_controller
-        while True:
-            if self.see_yellow():
-                break
-            turtle_controller.cmd_velocity(linear=0, angular=0.60)
-            turtle_controller.rate.sleep()
-        turtle_controller.cmd_velocity(linear=0, angular=0)
+        turtle_map_yellow = self.automat.turtle_map_yellow
+        turtle_map_purple = self.automat.turtle_map_purple
 
-    def lose_garage_from_sight(self):
-        turtle_controller = self.automat.turtle_controller
-        while True:
-            if not self.see_yellow():
+        for angle_rad in angles_to_scan:
+            if not turtle_vision.is_color_visible(color="yellow", minimal_size=yellow_visibility_min_size):
+                logger.warning("Lost sight of yellow marker during 360 scan, stopping scan early.")
                 break
-            turtle_controller.cmd_velocity(linear=0, angular=-0.60)
-            turtle_controller.rate.sleep()
-        turtle_controller.cmd_velocity(linear=0, angular=0)
+
+            logger.debug(f"Scanning at angle: {angle_rad:.2f} rad")
+            yellow_points = turtle_vision.sample_garage(
+                color="yellow", sampling_step=1, minimal_size=yellow_sample_min_size
+            )
+            purple_points = turtle_vision.sample_garage(
+                color="purple", sampling_step=1, minimal_size=purple_sample_min_size
+            )
+
+            odom = turtle_controller.get_odometry()
+
+            if yellow_points: 
+                turtle_map_yellow.add_points(yellow_points, odom)
+            if purple_points: 
+                turtle_map_purple.add_points(purple_points, odom)
+
+            logger.debug(f"Rotating to next scan angle: {angle_rad:.2f} rad")
+            turtle_controller.rotate(angle_rad, relative=False, tol=0.1) 
+            time.sleep(0.1) 
+        
+        logger.info("360-degree scan and mapping process completed.")
 
     def action(self):
-        # Garage must initially be out of view!
-        self.lose_garage_from_sight()
+        SCAN_T2_INIT_YELLOW_MIN_SIZE = 100 
+        SCAN_LOOP_YELLOW_VISIBILITY_MIN_SIZE = 15 
+        SCAN_YELLOW_SAMPLE_MIN_SIZE = 15
+        SCAN_PURPLE_SAMPLE_MIN_SIZE = 4
 
-        # Find garage first
-        self.find_garage()
+        turtle_vision = self.automat.turtle_vision
+        turtle_controller = self.automat.turtle_controller
 
-        # Scan
-        current_yaw = self.automat.turtle_controller.get_odometry()[1]
+        # Part 1: Initial positioning (lose and find yellow)
+        turtle_vision.rotate_until_color_not_visible(
+            turtle_controller,
+            color="yellow",
+            minimal_size=SCAN_T2_INIT_YELLOW_MIN_SIZE,
+            angular_velocity=-0.60
+        )
+        turtle_vision.rotate_until_color_visible(
+            turtle_controller,
+            color="yellow",
+            minimal_size=SCAN_T2_INIT_YELLOW_MIN_SIZE,
+            angular_velocity=0.60
+        )
+
+        # Part 2: Setup for scanning loop
+        current_yaw = turtle_controller.get_odometry()[1]
         angles = np.linspace(current_yaw, current_yaw + 2 * np.pi, 12)
 
-        YELLOW_MIN_SIZE = 15
-        PURPLE_MIN_SIZE = 4
-        for angle in angles:
+        # Call the helper method to perform the scan.
+        self._perform_360_scan_and_map(
+            angles_to_scan=angles,
+            yellow_visibility_min_size=SCAN_LOOP_YELLOW_VISIBILITY_MIN_SIZE,
+            yellow_sample_min_size=SCAN_YELLOW_SAMPLE_MIN_SIZE,
+            purple_sample_min_size=SCAN_PURPLE_SAMPLE_MIN_SIZE
+        )
 
-            if not self.see_yellow():
-                break
+    def _calculate_task1_target_point(self, current_position, cluster1_mid, cluster2_mid):
+        """
+        Calculates a target navigation point for transitioning to Task1,
+        based on the robot's position and two purple cluster midpoints.
+        This encapsulates the "Some highschool math" logic.
+        """
+        NORMAL_DISTANCE_FACTOR = 1.5 # Factor to move along the normal vector
+        
+        vec_pos_from_c1 = current_position - cluster1_mid
+        vec_c1_from_c2 = cluster1_mid - cluster2_mid
+        normal_vec = np.array([-vec_c1_from_c2[1], vec_c1_from_c2[0]])
 
-            # Scan environment
-            yellow_points = self.automat.turtle_vision.sample_garage(
-                color="yellow", sampling_step=1, minimal_size=YELLOW_MIN_SIZE
-            )
-            purple_points = self.automat.turtle_vision.sample_garage(
-                color="purple", sampling_step=1, minimal_size=PURPLE_MIN_SIZE
-            )
+        if np.dot(vec_pos_from_c1, normal_vec) < 0:
+            normal_vec = -normal_vec
+        
+        norm_of_normal = np.linalg.norm(normal_vec)
+        if norm_of_normal < 1e-6: 
+            logger.warning("Normal vector is near zero in _calculate_task1_target_point. Using zero vector.")
+            unit_normal_vec = np.array([0.0, 0.0])
+        else:
+            unit_normal_vec = normal_vec / norm_of_normal
 
-            # Current odometry
-            odom = self.automat.turtle_controller.get_odometry()
-
-            # Add points to maps
-            self.automat.turtle_map_yellow.add_points(yellow_points, odom)
-            self.automat.turtle_map_purple.add_points(purple_points, odom)
-
-            # Rotate to next position
-            self.automat.turtle_controller.rotate(angle, relative=False, tol=0.1)
-            time.sleep(0.1)
+        target_point = cluster2_mid + (vec_c1_from_c2 / 2.0) + (unit_normal_vec * NORMAL_DISTANCE_FACTOR)
+        
+        return target_point
 
     def get_next_state(self):
 
@@ -352,18 +375,18 @@ class Scan_T2(State):
                 clusters, [f"Purple cluster {i}" for i in range(len(clusters))]
             )
 
-            # Some highschool math
-            cluster1_mid = cluster_mids[0]
-            cluster2_mid = cluster_mids[1]
-            P1 = position - cluster1_mid
-            t = cluster1_mid - cluster2_mid
-            n = np.array([-t[1], t[0]])
-            if np.dot(P1, n) < 0:
-                n = -n
-            p = cluster2_mid + t / 2 + n * 1.5
-            logger.info(f"Moving to point: {p}")
-            self.automat.turtle_controller.move_to(p, relative=False)
-            return self.automat.states["Task1"]
+            # Geometric calculation replaced by helper method.
+            # The check `use_task1` (i.e., purple_map.cluster_count >= 2)
+            # and sorting of cluster_mids should generally ensure cluster_mids[0] and cluster_mids[1] are valid.
+            if len(cluster_mids) >= 2: # Robustness check
+                p = self._calculate_task1_target_point(position, cluster_mids[0], cluster_mids[1])
+                logger.info(f"Calculated Task1 target point: {p}. Moving to point.")
+                self.automat.turtle_controller.move_to(p, relative=False)
+                return self.automat.states["Task1"]
+            else:
+                # This case should be rare if use_task1 is true and sorting is effective.
+                logger.warning("Not enough cluster midpoints for geometric calculation. Proceeding to ICP.")
+
 
         # Fit garage model using ICP
         yellow_downsampled = self.automat.turtle_map_yellow.points_downsampled

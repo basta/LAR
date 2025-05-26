@@ -2,8 +2,11 @@
 
 import numpy as np
 import math, time, cv2
+import logging
 
 import TurtleUtils
+
+logger = logging.getLogger(__name__)
 
 YELLOW_HSV_MID = np.array([30, 170, 170])
 YELLOW_HSV_RANGE = np.array([10, 100, 172])
@@ -13,12 +16,17 @@ PURPLE_HSV_RANGE = np.array([20, 66, 159])
 
 
 class TurtlebotVision:
+    UPPER_PIXEL_STRIP = 100
+    LOWER_PIXEL_STRIP = 200
+    DEFAULT_PURPLE_MIN_SIZE = 10
+    DEFAULT_YELLOW_MIN_SIZE = 30
+
     def __init__(self, turtle):
         self.turtle = turtle
 
         # Strip parameters
-        self.upper_pixel = 100
-        self.lower_pixel = 200
+        self.upper_pixel = self.UPPER_PIXEL_STRIP
+        self.lower_pixel = self.LOWER_PIXEL_STRIP
 
         # Yellow HSV ranges
         self.set_yellow_range(YELLOW_HSV_MID, YELLOW_HSV_RANGE)
@@ -28,9 +36,12 @@ class TurtlebotVision:
 
         # Image data
         self.img_width = 640
-        self.img_heith = 480
+        self.img_height = 480 # Corrected typo: heith -> height
 
-        # Pixel to angle conversion constant
+        # Pixel to angle conversion constant (self.p2a).
+        # This value typically represents the camera's focal length in pixels.
+        # It is used in the `pixel2angle` method to convert a pixel coordinate
+        # (distance from image center) into an angle (e.g., field of view).
         self.p2a = 620
 
     def set_yellow_range(self, yellow_mid, yellow_range):
@@ -110,10 +121,54 @@ class TurtlebotVision:
 
         return mask
 
+    def _reg_mean(self, regs):
+        """
+        Calculates the mean of the start and stop indices of regions.
+        'regs' is expected to be a list of region tuples (start_idx, stop_idx, ...).
+        """
+        s, n_points = 0.0, 0
+        if regs: # Ensure regs is not empty
+            # Each region contributes its start and stop indices to the mean
+            n_points = len(regs) * 2 
+            if n_points == 0: # Should not happen if regs is not empty and regions are valid
+                return 0.0 
+            for reg_start, reg_stop, *_ in regs: # Unpack to use only start and stop
+                s += reg_start + reg_stop
+        return s / n_points if n_points > 0 else 0.0
+
     # ===== Garage detection =====
     def get_regions(self, color="yellow", minimal_size=10):
         mask = self.get_rgb_mask(color=color)
         return TurtleUtils.mask_regions(mask[0], minimal_size=minimal_size)
+
+    def is_color_visible(self, color: str, minimal_size: int) -> bool:
+        """Checks if any regions of the specified color and minimum size are visible."""
+        regions = self.get_regions(color=color, minimal_size=minimal_size)
+        return len(regions) > 0
+
+    def rotate_until_color_visible(self, controller, color: str, minimal_size: int, angular_velocity: float = 0.6):
+        """
+        Rotates the robot until a region of the specified color and minimum size is visible.
+        The controller object must provide cmd_velocity(linear, angular) and rate.sleep() methods.
+        """
+        logger.info(f"Rotating to find color '{color}' with min_size {minimal_size} using angular_velocity {angular_velocity:.2f} rad/s.")
+        while not self.is_color_visible(color, minimal_size):
+            controller.cmd_velocity(linear=0.0, angular=angular_velocity)
+            controller.rate.sleep()
+        controller.cmd_velocity(linear=0.0, angular=0.0) # Stop robot
+        logger.info(f"Color '{color}' found.")
+
+    def rotate_until_color_not_visible(self, controller, color: str, minimal_size: int, angular_velocity: float = -0.6):
+        """
+        Rotates the robot until a region of the specified color and minimum size is no longer visible.
+        The controller object must provide cmd_velocity(linear, angular) and rate.sleep() methods.
+        """
+        logger.info(f"Rotating to lose sight of color '{color}' with min_size {minimal_size} using angular_velocity {angular_velocity:.2f} rad/s.")
+        while self.is_color_visible(color, minimal_size):
+            controller.cmd_velocity(linear=0.0, angular=angular_velocity)
+            controller.rate.sleep()
+        controller.cmd_velocity(linear=0.0, angular=0.0) # Stop robot
+        logger.info(f"Color '{color}' no longer visible.")
 
     def pixel2angle(self, p):
         p_mid = p - self.img_width // 2
@@ -135,7 +190,32 @@ class TurtlebotVision:
         points = TurtleUtils.robot2plt(points) if r2p else points
         return points
 
+    def find_garage_alignment_error(self, purple_min_size=None, yellow_min_size=None):
+        # Use class defaults if specific sizes are not provided
+        if purple_min_size is None:
+            purple_min_size = self.DEFAULT_PURPLE_MIN_SIZE
+        if yellow_min_size is None:
+            yellow_min_size = self.DEFAULT_YELLOW_MIN_SIZE
+
+        regs_purple = self.get_regions(color="purple", minimal_size=purple_min_size)
+        regs_yellow = self.get_regions(color="yellow", minimal_size=yellow_min_size)
+
+        if len(regs_purple) < 2 or len(regs_yellow) == 0:
+            return None, "insufficient_regions"  # Status indicating not enough features
+
+        # Calculate midpoint of purple regions
+        # Assumes _reg_mean is available as a private method
+        purple_mid = self._reg_mean(regs_purple)
+        
+        # Calculate error from image center
+        # Assumes self.img_width is available
+        alignment_error = purple_mid - self.img_width // 2
+        
+        return alignment_error, "regions_found"
+
     def garage_entry_waypoints(self):
+        PRE_GARAGE_POINT_DISTANCE_FACTOR = 0.55
+        GOAL_POINT_DISTANCE_FACTOR = 0.25
         regs = self.get_regions(color="purple")
 
         # Left pillar pixel
@@ -178,9 +258,9 @@ class TurtlebotVision:
         point_offset = t / np.linalg.norm(t) * CAMERA_OFFSET
 
         # Pre-garage point
-        P_PG = P_G + n1 / np.linalg.norm(n1) * 0.55 - point_offset
+        P_PG = P_G + n1 / np.linalg.norm(n1) * PRE_GARAGE_POINT_DISTANCE_FACTOR - point_offset
 
         # Goal point
-        P_GOAL = P_G + n2 / np.linalg.norm(n2) * 0.25 - point_offset
+        P_GOAL = P_G + n2 / np.linalg.norm(n2) * GOAL_POINT_DISTANCE_FACTOR - point_offset
 
         return [P1, P2, P_G, P_PG, P_GOAL]

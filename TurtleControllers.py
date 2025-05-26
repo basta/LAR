@@ -28,10 +28,9 @@ class TurtlebotOdometry:
         self.yaw += yaw_diff
         return self.yaw
 
-    def _normalize_angle(self, angle):
-        angle = math.fmod(angle + np.pi, 2 * np.pi)
-        angle = angle + np.pi if angle <= 0.0 else angle - np.pi
-        return angle
+    def _normalize_angle(self, angle: float) -> float:
+        """Normalizes an angle to the range [-pi, pi]."""
+        return np.arctan2(np.sin(angle), np.cos(angle))
 
 
 class TurtleDrive:
@@ -92,10 +91,6 @@ class TurtleDrive:
                 desired_yaw - current_yaw, -self.max_yaw_rate, self.min_yaw_rate
             )
 
-            # Current solution
-            # self.turtle.cmd_velocity(linear = linear_velocity, angular = angular_velocity)
-
-            # Upgraded solution
             linear_velocity = (
                 np.clip(linear_velocity, self.min_linear_rate, self.max_linear_rate)
                 if linear_velocity > 0
@@ -106,8 +101,9 @@ class TurtleDrive:
                 if linear_velocity < 0
                 else linear_velocity
             )
+            # Ensures that if moving, the speed is at least min_linear_rate,
+            # preventing the robot from stopping due to too small velocity commands.
 
-            # Set velocity command
             self.turtle.cmd_velocity(linear=linear_velocity, angular=angular_velocity)
 
             self.rate.sleep()
@@ -133,7 +129,6 @@ class TurtleDrive:
 
         # Rotate so that turtlebot points at the desired position with its body frame x-axis
         phi = math.atan2(error[1], error[0])
-        phi = current_yaw + angle_diff(current_yaw, phi)  # TODO: Is this necessary?
 
         self.rotate(phi, relative=False)
 
